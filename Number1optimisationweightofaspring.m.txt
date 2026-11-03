@@ -1,0 +1,53 @@
+%% SPRING WEIGHT MINIMIZATION
+clear; clc;
+
+% Design variables:
+% x(1) = wire diameter d
+% x(2) = mean coil diameter D
+% x(3) = number of active coils N
+
+objective = @(x) x(1)^2 * x(2) * (x(3) + 2);
+
+% Nonlinear inequality constraints: c(x) <= 0
+nonlcon_ineq = @(x) [(x(2)^3 * x(3)) / (71785 * x(1)^4) - 1;1 - (4*x(2)^2 - x(1)*x(2)) /(12566 * x(1)^3 * (x(2)-x(1))) - 1/(5108*x(1)^2); (140.45*x(1)) / (x(2)^2 * x(3)) - 1;1 - (x(1)+x(2))/1.5];
+
+% fmincon/ga/patternsearch format: [c, ceq]
+nonlcon = @(x) deal(nonlcon_ineq(x), []);
+
+lb = [0.05, 0.25, 2];
+ub = [2.00, 1.30, 15];
+x0 = [0.05, 0.30, 10];
+
+%% 1. fmincon
+opts = optimoptions('fmincon','Algorithm','interior-point','Display','off','FunctionTolerance',1e-12,'StepTolerance',1e-12,'ConstraintTolerance',1e-10);
+
+[x_fmincon, f_fmincon] = fmincon(objective, x0, [],[],[],[],lb, ub, nonlcon, opts);
+
+%% 2. Genetic algorithm
+opts = optimoptions('ga','Display','off','PopulationSize',100,'MaxGenerations',500,'FunctionTolerance',1e-12);
+
+[x_ga, f_ga] = ga(objective, 3, [],[],[],[], lb, ub, nonlcon, opts);
+
+%% 3. Pattern search
+opts = optimoptions('patternsearch','Display','off','FunctionTolerance',1e-12,'MaxFunctionEvaluations',20000);
+
+[x_ps, f_ps] = patternsearch(objective, x0, [],[],[],[],lb, ub, nonlcon, opts);
+
+%% 4. Particle swarm with exterior penalty
+penalty = @(x) objective(x) + 1e6 * sum(max(0, nonlcon_ineq(x)).^2);
+
+opts = optimoptions('particleswarm','Display','off','SwarmSize',100,'MaxIterations',1000,'FunctionTolerance',1e-12);
+
+[x_pso, f_penalty_pso] = particleswarm(penalty, 3, lb, ub, opts);
+
+% Report the true objective and constraint violation for PSO
+f_pso = objective(x_pso);
+viol_pso = max(0, nonlcon_ineq(x_pso));
+
+%% Results
+fprintf('Results');
+fprintf('fmincon:      x = [%.6f %.6f %.6f], f = %.8f\n', x_fmincon, f_fmincon);
+fprintf('ga:           x = [%.6f %.6f %.6f], f = %.8f\n', x_ga, f_ga);
+fprintf('patternsearch:x = [%.6f %.6f %.6f], f = %.8f\n', x_ps, f_ps);
+fprintf('particleswarm:x = [%.6f %.6f %.6f], f = %.8f\n', x_pso, f_pso);
+fprintf('PSO max constraint violation = %.3e\n', max(viol_pso));
